@@ -1,0 +1,58 @@
+---
+title: "Trabalho 1"
+output: html_notebook
+---
+
+* Aluna: Danyelle da Silva Oliveira Angelo      - Matrícula: 12222CCP009
+* Disciplina: PGC201 - Mineração de dados
+
+Problema: dada uma região (Sistema), um setor econômico e o nível de consumo de energia elétrica, dizer a qual estado esses dados pertencem.
+```{r}
+library(here)
+library(tidymodels)
+library(tidyverse)
+library(janitor)#clean_names
+
+here::i_am("trabalho1/trabalho1.Rmd")
+
+selectedColumns <-  c("Sistema", "Setor Econômico - N1", "Setor Econômico - N2", "Consumo", "UF")
+#Extraído de: https://www.epe.gov.br/pt/publicacoes-dados-abertos/dados-abertos/dados-do-anuario-estatistico-de-energia-eletrica
+data <- read_csv2("epe.csv", col_select = selectedColumns)
+data <- clean_names(data)
+data <- as.data.frame(data)
+data <- as.data.frame(unclass(data), stringsAsFactors = TRUE)
+
+#
+split_data <- initial_split(data, prop = 0.8)
+treino <- training(split_data)
+teste <- testing(split_data)
+
+#
+ggplot(treino) + geom_point(aes(consumo,sistema, color=setor_economico_n1)) 
+#
+preparation_tree <- recipe(uf ~., treino) |>
+                    step_scale(all_numeric_predictors())
+model_tree <- decision_tree(mode = "classification", engine = "rpart")
+wf_tree <- workflow(preparation_tree, model_tree)
+fitted_model_tree <- fit(wf_tree, treino)
+# 
+#
+predicoes <- predict(fitted_model_tree, teste)
+predicoes <- mutate(predicoes, y = teste$uf)
+metric <- predicoes |> metrics(y, .pred_class)
+print(metric)
+# #
+
+avg_e_consumption <- treino |> group_by(uf, setor_economico_n1, sistema) |>
+                            summarise(
+                            `Gasto Médio` = mean(consumo,  na.rm = TRUE),
+                            `Gasto Mediano` = median(consumo,  na.rm = TRUE),
+                            `Menor Gasto` = min(consumo,  na.rm = TRUE),
+                            `Maior Gasto` = max(consumo,  na.rm = TRUE),
+                            `Quantidade de dados analisados` = n()
+                        ) |>
+                        arrange(desc(`Gasto Médio`))
+print(avg_e_consumption)
+```
+
+
